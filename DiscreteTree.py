@@ -3,14 +3,15 @@ import numpy as np
 import random
 from itertools import chain
 from collections import defaultdict
+from AbstractTree import AbstractTree
+from TestResult import TestResult
 
-class Tree:
+class DiscreteTree(AbstractTree):
     graphViz="digraph G{\n"
-    def __init__(self, parent=None):
-        self.parent = parent
-        self.children = []
-        self.label = None
+    def __init__(self, parent=None, part_of_forest = False, split_features_num = None, classes = None):
+        super().__init__(parent, part_of_forest, split_features_num)
         self.classCounts = None
+        self.classes = classes
         self.splitFeatureValue = None
         self.splitFeature = None
         
@@ -23,13 +24,13 @@ class Tree:
     def add_to_graphViz(self):
         for child in self.children:
             #print(Tree.graphViz)
-            Tree.graphViz += self.to_string() + " -> " + child.to_string() + "\n"
+            DiscreteTree.graphViz += self.to_string() + " -> " + child.to_string() + "\n"
             child.add_to_graphViz()
 
     def to_graphViz(self):
         self.add_to_graphViz()
-        Tree.graphViz+="}"
-        return Tree.graphViz
+        DiscreteTree.graphViz+="}"
+        return DiscreteTree.graphViz
 
     def split(self, data, remainingFeatures):
         ''' Build a decision tree from the given data, appending the children
@@ -43,29 +44,35 @@ class Tree:
             return majorityVote(data, self)
 
         # find the index of the best feature to split on
-        a = list(remainingFeatures)
-        random.shuffle(a)
-        split_features = a[:self.split_features_num]
-        bestFeature = max(split_features, key=lambda index: gain(data, index))
+        split_features = self.generate_indices(remainingFeatures)
+        bestFeature = max(split_features, key=lambda index: self.gain(data, index))
 
-        if gain(data, bestFeature) == 0:
+        if self.gain(data, bestFeature) == 0:
             return majorityVote(data, self)
 
         self.splitFeature = bestFeature
 
         # add child nodes and process recursively
         for dataSubset in splitData(data, bestFeature):
-            aChild = Tree(parent=self)
+            aChild = DiscreteTree(parent=self)
             aChild.splitFeatureValue = dataSubset[0][0][bestFeature]
             self.children.append(aChild)
-
             aChild.split(dataSubset, remainingFeatures - set([bestFeature]))
         return self
 
-    def learn(self, data):
-        self.split(data, set(range(len(data[0][0]))))
+    def generate_indices(self, remainingFeatures):
+        a = list(remainingFeatures)
+        random.shuffle(a)
+        k = max(1, int(len(a)**0.5))
+        split_features = a[:k]
+        return split_features
 
-    def classify(self, point):
+    def learn(self, data):
+        self.split_features_num = len(data[0][0])
+        self.split(data, set(range(len(data[0][0]))))
+        self.prune()
+
+    def predict(self, point):
         if self.children == []:
             return self.label
         else:
@@ -73,14 +80,14 @@ class Tree:
                 if child.splitFeatureValue == point[self.splitFeature]]
             if len(matchingChildren) == 0:
                 return self.children[0].label
-            return matchingChildren[0].classify(point)
+            return matchingChildren[0].predict(point)
 
-    def test_Tree(self, data):
-        correct = 0
+    def test(self, data):
+        result = TestResult(self.classes)
         for x,y in data:
-            if self.classify(x) == y:
-                correct+=1
-        return correct/len(data)*100
+            result.update(self.predict(x), y)
+        result.calculate_accuracy()
+        return result
 
     def prune(self):
         if self.children == []:
@@ -111,6 +118,22 @@ class Tree:
         else:
             for child in self.children: child.prune()
 
+    def gain(self, data, featureIndex):
+        entropyGain = entropy(dataToDistribution(data))
+        for dataSubset in splitData(data, featureIndex):
+            entropyGain -= len(dataSubset)/len(data)*entropy(dataToDistribution(dataSubset))
+        return entropyGain
+
+    def read_data(file):
+        with open(file, 'r') as inputFile:
+            lines = inputFile.readlines()
+        data = [line.strip().split(',') for line in lines]
+        data = [(np.array([float(n) for n in x[:-1]]), x[-1]) for x in data]
+        random.shuffle(data)
+        length = int(0.8 * len(data))
+        train = data[:length]
+        test = data[length:]
+        return train, test
 
 
 
@@ -141,13 +164,6 @@ def splitData(data, featureIndex):
 
         yield dataSubset
 
-def gain(data, featureIndex):
-    ''' Compute the expected gain from splitting the data along all possible
-    values of feature. '''
-    entropyGain = entropy(dataToDistribution(data))
-    for dataSubset in splitData(data, featureIndex):
-        entropyGain -= len(dataSubset)/len(data)*entropy(dataToDistribution(dataSubset))
-    return entropyGain
 
 def homogeneous(data):
     ''' Return True if the data have the same label, and False otherwise. '''
@@ -155,22 +171,13 @@ def homogeneous(data):
 
 def majorityVote(data, node):
     ''' Label node with the majority of the class labels in the given data set. '''
-    labels = set([label for (pt, label) in data])
-    choice = max(labels, key=labels.count)
+    labels = [label for (pt, label) in data]
+    choice = max(set(labels), key=labels.count)
     node.label = choice
-    node.classCounts = dict([(label, labels.count(label)) for label in labels])
+    node.classCounts = dict([(label, labels.count(label)) for label in set(labels)])
     return node
 
 
 
-def read_data():
-    with open('obrazy2/obrazy2.txt', 'r') as inputFile:
-        lines = inputFile.readlines()
-    data = [line.split() for line in lines]
-    data = [(np.array([int(n) for n in x[0]]), x[1]) for x in data]
-    random.shuffle(data)
-    length = int(0.8 * len(data))
-    train = data[:length]
-    test = data[length:]
-    return train, test
+
 

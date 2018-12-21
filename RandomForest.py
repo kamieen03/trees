@@ -1,31 +1,31 @@
-from Tree import Tree
-from RegressionTree import RegressionTree
+from DiscreteTree import DiscreteTree
+from ContinuousTree import ContinuousTree
 from TestResult import TestResult
 import pickle
 import random
 import numpy as np
 
 class RandomForest():
-    def __init__(self, n, train, test, problem):
+    def __init__(self, n, train, tree_type, problem, classes = None):
         self.split_features_num = len(train[0][0])
         self.train_data = train
-        self.test_data = test
         self.iteration = 0
-        self.problem = problem.upper()
-        #self.split_features_num = int(len(self.train_data[0][0])**0.5)
-        if self.problem == "REGRESSION":
-            self.trees = [RegressionTree(part_of_forest = True) for _ in range(n)]
+        self.problem = problem[0].lower()
+        self.classes = classes
+        if tree_type == "con":
+            self.trees = [ContinuousTree(part_of_forest = True,
+                        split_features_num = self.split_features_num, 
+                        problem = self.problem) for _ in range(n)]
         else:
-            self.trees = [Tree() for _ in range(n)]
+            self.trees = [DiscreteTree(part_of_forest = True,
+                        split_features_num = self.split_features_num) for _ in range(n)]
 
     def learn(self):
         for t in self.trees:
-            #t.split_features_num = self.split_features_num
             train = self.sample(self.train_data)
             t.learn(train)
-            #t.prune()
             self.iteration += 1
-            print(self.iteration)
+            print("{}-th tree trained.".format(self.iteration))
 
     def sample(self, data):
         n = len(data)
@@ -34,20 +34,20 @@ class RandomForest():
             new_data.append(data[random.randrange(n)])
         return np.array(new_data)
 
-    def classify(self, x):
-        if self.problem == "REGRESSION":
+    def predict(self, x):
+        if self.problem == 'r':
             return np.mean([t.predict(x) for t in self.trees])
-        elif self.problem == "CLASSIFY":
-            vote_dict = {str(i):0 for i in range(6)}
+        elif self.problem == 'c':
+            vote_dict = {c:0 for c in self.classes}
             for t in self.trees:
-                c = t.classify(x)
+                c = t.predict(x)
                 vote_dict[c] += 1
             return max(vote_dict, key = lambda c: vote_dict[c])
 
     def test(self, data):
-        result = TestResult()
+        result = TestResult(self.classes)
         for x,y in data:
-            result.update(self.classify(x), y)
+            result.update(self.predict(x), y)
         result.calculate_accuracy()
         return result
 

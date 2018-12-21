@@ -1,6 +1,7 @@
 from RandomForest import RandomForest
-from RegressionTree import RegressionTree
+from ContinuousTree import ContinuousTree
 from TestResult import TestResult
+from DiscreteTree import DiscreteTree
 import random
 import numpy as np
 from matplotlib import pyplot as plt
@@ -17,8 +18,7 @@ def read_data():
     test = data[length:, :]
     return train, test
 
-
-if __name__ == '__main__':
+def rf_regression_test():
     RMSEs, MAEs = [], []
     SIZE = 20
     xs = [i for i in range(1, SIZE + 1)]
@@ -27,7 +27,7 @@ if __name__ == '__main__':
         f = RandomForest(0, train, test, "regression")
         tempRMSEs, tempMAEs = [], []
         for j in range(SIZE):
-            t = RegressionTree(part_of_forest = True)
+            t = ContinuousTree(part_of_forest = True)
             train = f.sample(f.train_data)
             #train = f.train_data
             t.learn(train)
@@ -51,3 +51,13 @@ if __name__ == '__main__':
     ax.set_ylabel("Number of trees in forest")
     ax.legend()
     plt.show()
+
+if __name__ == '__main__':
+    train, test = ContinuousTree.read_data("data/voice.csv")
+    rf = RandomForest(1, train, tree_type = "con",
+                     problem = "classify", classes = ['male', 'female'])
+    rf.learn()
+    print(rf.test(test))
+    t = ContinuousTree(classes = ['male', 'female'], problem = "c")
+    t.learn(train)
+    print(t.test(test))
